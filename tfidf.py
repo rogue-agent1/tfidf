@@ -1,51 +1,52 @@
 #!/usr/bin/env python3
-"""tfidf - TF-IDF text analysis for document comparison."""
-import sys, re, math, collections
+"""TF-IDF text similarity from scratch."""
+import sys, math, re
+from collections import Counter
 
-STOP = {'the','a','an','is','are','was','were','be','been','being','have','has','had',
-    'do','does','did','will','would','could','should','may','might','shall','can',
-    'in','on','at','to','for','of','with','by','from','as','into','through','during',
-    'and','but','or','nor','not','so','yet','both','either','neither','this','that',
-    'these','those','it','its','i','you','he','she','we','they','me','him','her','us','them'}
-
-def tokenize(text):
-    return [w for w in re.findall(r'\b\w+\b', text.lower()) if w not in STOP and len(w) > 2]
+def tokenize(text): return re.findall(r'\w+', text.lower())
 
 def tf(doc):
-    words = tokenize(doc)
-    counts = collections.Counter(words)
-    total = len(words)
-    return {w: c/total for w, c in counts.items()}
+    words = tokenize(doc); n = len(words)
+    return {w: c/n for w, c in Counter(words).items()}
 
 def idf(docs):
-    n = len(docs)
-    df = collections.Counter()
+    n = len(docs); df = Counter()
     for doc in docs:
-        df.update(set(tokenize(doc)))
-    return {w: math.log(n / (1+c)) for w, c in df.items()}
+        for w in set(tokenize(doc)): df[w] += 1
+    return {w: math.log(n/(c+1))+1 for w, c in df.items()}
 
-def tfidf(docs, top=10):
+def tfidf(docs):
     idf_scores = idf(docs)
-    results = []
-    for i, doc in enumerate(docs):
+    vectors = []
+    for doc in docs:
         tf_scores = tf(doc)
-        scores = {w: tf_scores[w] * idf_scores.get(w, 0) for w in tf_scores}
-        top_words = sorted(scores.items(), key=lambda x: -x[1])[:top]
-        results.append(top_words)
-    return results
+        vectors.append({w: tf_scores[w]*idf_scores.get(w,1) for w in tf_scores})
+    return vectors
 
-def main():
-    args = sys.argv[1:]
-    if not args or '-h' in args:
-        print("Usage: tfidf.py FILE1 FILE2 ... [--top N]"); return
-    top = int(args[args.index('--top')+1]) if '--top' in args else 10
-    files = [a for a in args if not a.startswith('--') and a != str(top)]
-    docs = [open(f).read() for f in files]
-    results = tfidf(docs, top)
-    for i, (fname, words) in enumerate(zip(files, results)):
-        print(f"\n📄 {fname}:")
-        for w, score in words:
-            bar = '█' * int(score * 200)
-            print(f"  {score:.4f} {bar} {w}")
+def cosine_sim(a, b):
+    keys = set(a) | set(b)
+    dot = sum(a.get(k,0)*b.get(k,0) for k in keys)
+    na = math.sqrt(sum(v**2 for v in a.values()))
+    nb = math.sqrt(sum(v**2 for v in b.values()))
+    return dot/(na*nb) if na and nb else 0
 
-if __name__ == '__main__': main()
+if __name__ == '__main__':
+    if '--demo' in sys.argv:
+        docs = ["the cat sat on the mat","the dog sat on the log","cats and dogs are friends",
+                "machine learning is fun","deep learning neural networks","AI and machine learning"]
+        vectors = tfidf(docs)
+        print("Document similarity matrix:\n")
+        for i in range(len(docs)):
+            sims = [f"{cosine_sim(vectors[i],vectors[j]):.2f}" for j in range(len(docs))]
+            print(f"  D{i}: {' '.join(sims)}  '{docs[i][:30]}'")
+    elif len(sys.argv) > 2:
+        query = sys.argv[1]
+        docs = sys.argv[2:]
+        all_docs = [query] + docs
+        vectors = tfidf(all_docs)
+        print(f"Query: '{query}'\n\nRanked results:")
+        ranked = sorted(range(1,len(all_docs)), key=lambda i: cosine_sim(vectors[0],vectors[i]), reverse=True)
+        for i in ranked:
+            print(f"  {cosine_sim(vectors[0],vectors[i]):.3f}  '{docs[i-1][:50]}'")
+    else:
+        print("Usage: tfidf.py --demo | tfidf.py 'query' 'doc1' 'doc2' ...")
