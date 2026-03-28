@@ -1,52 +1,47 @@
 #!/usr/bin/env python3
-"""TF-IDF text similarity from scratch."""
-import sys, math, re
+"""tfidf - TF-IDF text analysis from scratch."""
+import argparse, math, re, json
 from collections import Counter
 
-def tokenize(text): return re.findall(r'\w+', text.lower())
+def tokenize(text: str) -> list:
+    return re.findall(r'\b\w+\b', text.lower())
 
-def tf(doc):
-    words = tokenize(doc); n = len(words)
-    return {w: c/n for w, c in Counter(words).items()}
+def tf(doc: list) -> dict:
+    counts = Counter(doc)
+    total = len(doc)
+    return {w: c / total for w, c in counts.items()}
 
-def idf(docs):
-    n = len(docs); df = Counter()
+def idf(docs: list) -> dict:
+    n = len(docs)
+    df = Counter()
     for doc in docs:
-        for w in set(tokenize(doc)): df[w] += 1
-    return {w: math.log(n/(c+1))+1 for w, c in df.items()}
+        df.update(set(doc))
+    return {w: math.log(n / (1 + count)) for w, count in df.items()}
 
-def tfidf(docs):
+def tfidf(docs: list) -> list:
     idf_scores = idf(docs)
-    vectors = []
+    results = []
     for doc in docs:
         tf_scores = tf(doc)
-        vectors.append({w: tf_scores[w]*idf_scores.get(w,1) for w in tf_scores})
-    return vectors
+        results.append({w: tf_scores[w] * idf_scores.get(w, 0) for w in tf_scores})
+    return results
 
-def cosine_sim(a, b):
-    keys = set(a) | set(b)
-    dot = sum(a.get(k,0)*b.get(k,0) for k in keys)
-    na = math.sqrt(sum(v**2 for v in a.values()))
-    nb = math.sqrt(sum(v**2 for v in b.values()))
-    return dot/(na*nb) if na and nb else 0
+def main():
+    p = argparse.ArgumentParser(description="TF-IDF analysis")
+    p.add_argument("files", nargs="+")
+    p.add_argument("--top", type=int, default=10)
+    p.add_argument("--json", action="store_true")
+    args = p.parse_args()
+    docs = [tokenize(open(f).read()) for f in args.files]
+    scores = tfidf(docs)
+    for i, (f, s) in enumerate(zip(args.files, scores)):
+        top = sorted(s.items(), key=lambda x: -x[1])[:args.top]
+        if args.json:
+            print(json.dumps({"file": f, "terms": [{"term": t, "score": round(sc, 4)} for t, sc in top]}))
+        else:
+            print(f"\n=== {f} ===")
+            for t, sc in top:
+                print(f"  {sc:.4f} {t}")
 
-if __name__ == '__main__':
-    if '--demo' in sys.argv:
-        docs = ["the cat sat on the mat","the dog sat on the log","cats and dogs are friends",
-                "machine learning is fun","deep learning neural networks","AI and machine learning"]
-        vectors = tfidf(docs)
-        print("Document similarity matrix:\n")
-        for i in range(len(docs)):
-            sims = [f"{cosine_sim(vectors[i],vectors[j]):.2f}" for j in range(len(docs))]
-            print(f"  D{i}: {' '.join(sims)}  '{docs[i][:30]}'")
-    elif len(sys.argv) > 2:
-        query = sys.argv[1]
-        docs = sys.argv[2:]
-        all_docs = [query] + docs
-        vectors = tfidf(all_docs)
-        print(f"Query: '{query}'\n\nRanked results:")
-        ranked = sorted(range(1,len(all_docs)), key=lambda i: cosine_sim(vectors[0],vectors[i]), reverse=True)
-        for i in ranked:
-            print(f"  {cosine_sim(vectors[0],vectors[i]):.3f}  '{docs[i-1][:50]}'")
-    else:
-        print("Usage: tfidf.py --demo | tfidf.py 'query' 'doc1' 'doc2' ...")
+if __name__ == "__main__":
+    main()

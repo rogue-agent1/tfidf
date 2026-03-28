@@ -1,7 +1,11 @@
 # tfidf
-TF-IDF text similarity from scratch. Zero dependencies.
+
+TF-IDF text analysis from scratch.
+
+Zero dependencies. Python 3.8+.
+
 ## Usage
+
 ```bash
-python3 tfidf.py --demo
-python3 tfidf.py "machine learning" "AI is great" "learning to code" "deep learning"
+python3 tfidf.py --help
 ```
