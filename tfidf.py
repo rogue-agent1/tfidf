@@ -1,65 +1,71 @@
 #!/usr/bin/env python3
-"""tfidf - TF-IDF text vectorizer with cosine similarity search."""
-import sys, json, math, re
+"""tfidf - TF-IDF vectorizer and cosine similarity."""
+import sys, math, re
 from collections import Counter
 
 def tokenize(text):
-    return re.findall(r'\b[a-z]+\b', text.lower())
+    return re.findall(r"[a-z0-9]+", text.lower())
 
-class TfIdf:
-    def __init__(self):
-        self.docs = []; self.df = Counter(); self.vocab = set()
-    
-    def add(self, text):
-        tokens = tokenize(text)
-        self.docs.append(tokens)
-        for t in set(tokens): self.df[t] += 1
-        self.vocab.update(tokens)
-    
-    def tfidf(self, doc_idx):
-        tokens = self.docs[doc_idx]; tf = Counter(tokens); n = len(self.docs)
-        vec = {}
-        for t, count in tf.items():
-            tf_val = count / len(tokens)
-            idf_val = math.log(n / (self.df[t] + 1)) + 1
-            vec[t] = tf_val * idf_val
-        return vec
-    
-    def cosine_sim(self, v1, v2):
-        common = set(v1.keys()) & set(v2.keys())
-        dot = sum(v1[k]*v2[k] for k in common)
-        n1 = math.sqrt(sum(v**2 for v in v1.values()))
-        n2 = math.sqrt(sum(v**2 for v in v2.values()))
-        return dot/(n1*n2) if n1 and n2 else 0
-    
-    def search(self, query, top_k=3):
-        qtokens = tokenize(query)
-        qtf = Counter(qtokens); n = len(self.docs)
-        qvec = {t: (c/len(qtokens))*(math.log(n/(self.df.get(t,0)+1))+1) for t, c in qtf.items()}
-        scores = []
-        for i in range(len(self.docs)):
-            dvec = self.tfidf(i)
-            scores.append((i, self.cosine_sim(qvec, dvec)))
-        return sorted(scores, key=lambda x: -x[1])[:top_k]
+def tf(doc):
+    tokens = tokenize(doc) if isinstance(doc, str) else doc
+    counts = Counter(tokens)
+    total = len(tokens)
+    return {t: c/total for t, c in counts.items()}
 
-def main():
-    tfidf = TfIdf()
-    docs = [
+def idf(corpus):
+    n = len(corpus)
+    doc_freq = Counter()
+    for doc in corpus:
+        tokens = set(tokenize(doc) if isinstance(doc, str) else doc)
+        for t in tokens:
+            doc_freq[t] += 1
+    return {t: math.log(n / df) for t, df in doc_freq.items()}
+
+def tfidf(corpus):
+    idf_scores = idf(corpus)
+    vectors = []
+    for doc in corpus:
+        tf_scores = tf(doc)
+        vec = {t: tf_scores[t] * idf_scores.get(t, 0) for t in tf_scores}
+        vectors.append(vec)
+    return vectors, idf_scores
+
+def cosine_similarity(a, b):
+    keys = set(a) | set(b)
+    dot = sum(a.get(k, 0) * b.get(k, 0) for k in keys)
+    na = math.sqrt(sum(v**2 for v in a.values()))
+    nb = math.sqrt(sum(v**2 for v in b.values()))
+    if na == 0 or nb == 0:
+        return 0.0
+    return dot / (na * nb)
+
+def most_similar(query, corpus, top_k=3):
+    vecs, idf_scores = tfidf(corpus + [query])
+    q_vec = vecs[-1]
+    scores = [(i, cosine_similarity(q_vec, vecs[i])) for i in range(len(corpus))]
+    return sorted(scores, key=lambda x: -x[1])[:top_k]
+
+def test():
+    corpus = [
         "the cat sat on the mat",
         "the dog played in the park",
-        "cats and dogs are popular pets",
-        "machine learning is a subset of artificial intelligence",
-        "deep learning uses neural networks",
-        "natural language processing handles text data",
+        "cats and dogs are friends",
     ]
-    for d in docs: tfidf.add(d)
-    print("TF-IDF demo\n")
-    results = tfidf.search("neural network machine learning")
-    for idx, score in results:
-        print(f"  [{score:.3f}] {docs[idx]}")
-    v0 = tfidf.tfidf(0)
-    top_terms = sorted(v0.items(), key=lambda x: -x[1])[:5]
-    print(f"\n  Doc 0 top terms: {[(t, round(s,3)) for t,s in top_terms]}")
+    vecs, idf_scores = tfidf(corpus)
+    assert len(vecs) == 3
+    assert "the" in idf_scores
+    # "the" appears in all docs, low IDF
+    assert idf_scores["the"] < idf_scores.get("cat", 1)
+    # similarity
+    sim = cosine_similarity(vecs[0], vecs[2])
+    assert 0 <= sim <= 1
+    # search
+    results = most_similar("cat on mat", corpus)
+    assert results[0][0] == 0  # most similar to first doc
+    print("OK: tfidf")
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] == "test":
+        test()
+    else:
+        print("Usage: tfidf.py test")
