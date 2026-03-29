@@ -1,11 +1,9 @@
-# tfidf
+# tfidf-engine
 
-TF-IDF text analysis from scratch.
-
-Zero dependencies. Python 3.8+.
+TF-IDF text search engine. Single-file Python CLI, zero dependencies.
 
 ## Usage
 
 ```bash
-python3 tfidf.py --help
+python3 tfidf.py
 ```
