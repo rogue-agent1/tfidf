@@ -1,11 +1,10 @@
 # tfidf
 
-TF-IDF vectorizer and cosine similarity.
+Single-file Python CLI. Zero dependencies.
 
 ## Usage
 
 ```bash
+python3 tfidf.py
 python3 tfidf.py test
 ```
-
-Zero dependencies. Python 3.8+.

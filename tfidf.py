@@ -1,71 +1,50 @@
 #!/usr/bin/env python3
-"""tfidf - TF-IDF vectorizer and cosine similarity."""
+"""TF-IDF vectorizer and document similarity."""
 import sys, math, re
 from collections import Counter
 
-def tokenize(text):
-    return re.findall(r"[a-z0-9]+", text.lower())
-
-def tf(doc):
-    tokens = tokenize(doc) if isinstance(doc, str) else doc
-    counts = Counter(tokens)
-    total = len(tokens)
-    return {t: c/total for t, c in counts.items()}
-
-def idf(corpus):
-    n = len(corpus)
-    doc_freq = Counter()
-    for doc in corpus:
-        tokens = set(tokenize(doc) if isinstance(doc, str) else doc)
-        for t in tokens:
-            doc_freq[t] += 1
-    return {t: math.log(n / df) for t, df in doc_freq.items()}
-
-def tfidf(corpus):
-    idf_scores = idf(corpus)
-    vectors = []
-    for doc in corpus:
-        tf_scores = tf(doc)
-        vec = {t: tf_scores[t] * idf_scores.get(t, 0) for t in tf_scores}
-        vectors.append(vec)
-    return vectors, idf_scores
-
-def cosine_similarity(a, b):
-    keys = set(a) | set(b)
-    dot = sum(a.get(k, 0) * b.get(k, 0) for k in keys)
-    na = math.sqrt(sum(v**2 for v in a.values()))
-    nb = math.sqrt(sum(v**2 for v in b.values()))
-    if na == 0 or nb == 0:
-        return 0.0
-    return dot / (na * nb)
-
-def most_similar(query, corpus, top_k=3):
-    vecs, idf_scores = tfidf(corpus + [query])
-    q_vec = vecs[-1]
-    scores = [(i, cosine_similarity(q_vec, vecs[i])) for i in range(len(corpus))]
-    return sorted(scores, key=lambda x: -x[1])[:top_k]
+class TfIdf:
+    def __init__(self):
+        self.idf = {}
+        self.vocab = set()
+        self.doc_count = 0
+    def tokenize(self, text):
+        return re.findall(r"[a-z]+", text.lower())
+    def fit(self, documents):
+        self.doc_count = len(documents)
+        df = Counter()
+        for doc in documents:
+            tokens = set(self.tokenize(doc))
+            self.vocab |= tokens
+            for t in tokens: df[t] += 1
+        self.idf = {t: math.log(self.doc_count / (1 + df[t])) for t in self.vocab}
+    def transform(self, doc):
+        tokens = self.tokenize(doc)
+        tf = Counter(tokens)
+        n = len(tokens) or 1
+        return {t: (tf[t]/n) * self.idf.get(t, 0) for t in set(tokens) if t in self.idf}
+    def cosine_sim(self, v1, v2):
+        common = set(v1) & set(v2)
+        if not common: return 0
+        dot = sum(v1[k]*v2[k] for k in common)
+        n1 = math.sqrt(sum(v*v for v in v1.values()))
+        n2 = math.sqrt(sum(v*v for v in v2.values()))
+        return dot/(n1*n2) if n1 and n2 else 0
 
 def test():
-    corpus = [
-        "the cat sat on the mat",
-        "the dog played in the park",
-        "cats and dogs are friends",
-    ]
-    vecs, idf_scores = tfidf(corpus)
-    assert len(vecs) == 3
-    assert "the" in idf_scores
-    # "the" appears in all docs, low IDF
-    assert idf_scores["the"] < idf_scores.get("cat", 1)
-    # similarity
-    sim = cosine_similarity(vecs[0], vecs[2])
-    assert 0 <= sim <= 1
-    # search
-    results = most_similar("cat on mat", corpus)
-    assert results[0][0] == 0  # most similar to first doc
-    print("OK: tfidf")
+    docs = ["the cat sat on the mat", "the dog sat on the rug", "birds fly in the sky"]
+    tfidf = TfIdf()
+    tfidf.fit(docs)
+    v1 = tfidf.transform(docs[0])
+    v2 = tfidf.transform(docs[1])
+    v3 = tfidf.transform(docs[2])
+    sim12 = tfidf.cosine_sim(v1, v2)
+    sim13 = tfidf.cosine_sim(v1, v3)
+    assert sim12 > sim13, f"cat/dog docs should be more similar: {sim12} vs {sim13}"
+    assert "cat" in v1
+    assert tfidf.idf.get("the", 0) < tfidf.idf.get("cat", 1)  # "the" is common
+    print("  tfidf: ALL TESTS PASSED")
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] == "test":
-        test()
-    else:
-        print("Usage: tfidf.py test")
+    if len(sys.argv) > 1 and sys.argv[1] == "test": test()
+    else: print("TF-IDF vectorizer")
