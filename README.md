@@ -1,6 +1,8 @@
-# tfidf-engine
+# tfidf
 
-TF-IDF text search engine. Single-file Python CLI, zero dependencies.
+tfidf - TF-IDF text vectorizer with cosine similarity search.
+
+Zero-dependency, single-file Python CLI.
 
 ## Usage
 

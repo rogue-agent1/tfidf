@@ -1,48 +1,65 @@
 #!/usr/bin/env python3
-"""TF-IDF — term frequency-inverse document frequency search."""
-import math, re, sys
+"""tfidf - TF-IDF text vectorizer with cosine similarity search."""
+import sys, json, math, re
 from collections import Counter
 
-class TFIDFEngine:
+def tokenize(text):
+    return re.findall(r'\b[a-z]+\b', text.lower())
+
+class TfIdf:
     def __init__(self):
-        self.docs = []; self.vocab = set(); self.idf = {}; self.tfidf = []
-    def _tokenize(self, text): return re.findall(r'\w+', text.lower())
-    def index(self, documents):
-        self.docs = documents; N = len(documents)
-        doc_tokens = [self._tokenize(d) for d in documents]
-        df = Counter()
-        for tokens in doc_tokens:
-            for t in set(tokens): df[t] += 1
-        self.vocab = set(df.keys())
-        self.idf = {t: math.log(N / (1 + df[t])) for t in self.vocab}
-        self.tfidf = []
-        for tokens in doc_tokens:
-            tf = Counter(tokens); n = len(tokens)
-            vec = {t: (tf[t]/n) * self.idf.get(t, 0) for t in set(tokens)}
-            self.tfidf.append(vec)
-    def search(self, query, top_k=5):
-        tokens = self._tokenize(query)
-        q_tf = Counter(tokens); n = len(tokens)
-        q_vec = {t: (q_tf[t]/n) * self.idf.get(t, 0) for t in tokens if t in self.idf}
+        self.docs = []; self.df = Counter(); self.vocab = set()
+    
+    def add(self, text):
+        tokens = tokenize(text)
+        self.docs.append(tokens)
+        for t in set(tokens): self.df[t] += 1
+        self.vocab.update(tokens)
+    
+    def tfidf(self, doc_idx):
+        tokens = self.docs[doc_idx]; tf = Counter(tokens); n = len(self.docs)
+        vec = {}
+        for t, count in tf.items():
+            tf_val = count / len(tokens)
+            idf_val = math.log(n / (self.df[t] + 1)) + 1
+            vec[t] = tf_val * idf_val
+        return vec
+    
+    def cosine_sim(self, v1, v2):
+        common = set(v1.keys()) & set(v2.keys())
+        dot = sum(v1[k]*v2[k] for k in common)
+        n1 = math.sqrt(sum(v**2 for v in v1.values()))
+        n2 = math.sqrt(sum(v**2 for v in v2.values()))
+        return dot/(n1*n2) if n1 and n2 else 0
+    
+    def search(self, query, top_k=3):
+        qtokens = tokenize(query)
+        qtf = Counter(qtokens); n = len(self.docs)
+        qvec = {t: (c/len(qtokens))*(math.log(n/(self.df.get(t,0)+1))+1) for t, c in qtf.items()}
         scores = []
-        for i, dvec in enumerate(self.tfidf):
-            dot = sum(q_vec.get(t, 0) * dvec.get(t, 0) for t in q_vec)
-            mag_q = math.sqrt(sum(v**2 for v in q_vec.values())) or 1
-            mag_d = math.sqrt(sum(v**2 for v in dvec.values())) or 1
-            scores.append((dot / (mag_q * mag_d), i))
-        scores.sort(reverse=True)
-        return [(self.docs[i], s) for s, i in scores[:top_k] if s > 0]
+        for i in range(len(self.docs)):
+            dvec = self.tfidf(i)
+            scores.append((i, self.cosine_sim(qvec, dvec)))
+        return sorted(scores, key=lambda x: -x[1])[:top_k]
+
+def main():
+    tfidf = TfIdf()
+    docs = [
+        "the cat sat on the mat",
+        "the dog played in the park",
+        "cats and dogs are popular pets",
+        "machine learning is a subset of artificial intelligence",
+        "deep learning uses neural networks",
+        "natural language processing handles text data",
+    ]
+    for d in docs: tfidf.add(d)
+    print("TF-IDF demo\n")
+    results = tfidf.search("neural network machine learning")
+    for idx, score in results:
+        print(f"  [{score:.3f}] {docs[idx]}")
+    v0 = tfidf.tfidf(0)
+    top_terms = sorted(v0.items(), key=lambda x: -x[1])[:5]
+    print(f"\n  Doc 0 top terms: {[(t, round(s,3)) for t,s in top_terms]}")
 
 if __name__ == "__main__":
-    docs = ["The quick brown fox jumps over the lazy dog",
-            "Python is a great programming language",
-            "Machine learning with neural networks",
-            "The fox and the hound are friends",
-            "Deep learning is a subset of machine learning",
-            "Programming in Python is fun and productive"]
-    engine = TFIDFEngine(); engine.index(docs)
-    for q in ["fox", "python programming", "machine learning neural"]:
-        results = engine.search(q, 3)
-        print(f"Query: '{q}'")
-        for doc, score in results: print(f"  [{score:.3f}] {doc}")
-        print()
+    main()
